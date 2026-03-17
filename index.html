@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LipLock Audio Player</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="player-container">
+        <div class="header">
+            <h1>LipLock</h1>
+            <p class="subtitle">Seamless Audio Crossfading</p>
+        </div>
+
+        <div class="track-selection">
+            <select id="track-selector" aria-label="Select Track"></select>
+        </div>
+        
+        <div class="controls-section">
+            <button id="play-pause-btn" disabled>
+                <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+            <div class="timeline">
+                <span id="time-display">0:00 / 0:00</span>
+                <input type="range" id="time-scrubber" min="0" max="100" value="0" step="0.1" disabled>
+            </div>
+        </div>
+
+        <div class="fader-section">
+            <div class="labels">
+                <span class="label-original">Original</span>
+                <span class="label-instrumental">Instrumental</span>
+            </div>
+            <input type="range" id="liplock-fader" min="0" max="1" step="0.01" value="0">
+        </div>
+    </div>
+    
+    <script src="tracks.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
