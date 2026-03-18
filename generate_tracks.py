@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.parse
+from mutagen.easyid3 import EasyID3
 
 def generate_tracks():
     base_dir = r"s:\Files\Projects\Coding\LipLock"
@@ -27,8 +28,22 @@ def generate_tracks():
                 break
         
         if matched_inst:
+            artist = ""
+            title = basename
+            # Try to read ID3 tags
+            try:
+                orig_path = os.path.join(originals_dir, orig)
+                audio = EasyID3(orig_path)
+                if 'artist' in audio and audio['artist']:
+                    artist = audio['artist'][0]
+                if 'title' in audio and audio['title']:
+                    title = audio['title'][0]
+            except Exception as e:
+                print(f"Could not read ID3 tags for {orig}: {e}")
+
             tracks_data.append({
-                "title": basename,
+                "title": title,
+                "artist": artist,
                 "original": f"Original Tracks/{orig}",
                 "instrumental": f"Instrumental Tracks/{matched_inst}"
             })

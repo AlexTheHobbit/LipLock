@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     TRACKS.forEach((track, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = track.title;
+        option.textContent = track.artist ? `${track.title} - ${track.artist}` : track.title;
         trackSelector.appendChild(option);
     });
 
