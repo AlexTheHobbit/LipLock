@@ -22,15 +22,33 @@ document.addEventListener('DOMContentLoaded', () => {
         trackSelector.appendChild(option);
     });
 
-    // Audio Elements
-    const originalAudio = new Audio();
-    const instrumentalAudio = new Audio();
+    // Web Audio API Configuration
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const originalGain = audioCtx.createGain();
+    const instrumentalGain = audioCtx.createGain();
+    
+    // Connect gains to final destination (speakers)
+    originalGain.connect(audioCtx.destination);
+    instrumentalGain.connect(audioCtx.destination);
 
-    let originalLoaded = false;
-    let instrumentalLoaded = false;
+    // Audio buffers to hold fully decoded sample data
+    let originalBuffer = null;
+    let instrumentalBuffer = null;
+    
+    // Active buffer source nodes (need to be recreated on every play/seek)
+    let originalSource = null;
+    let instrumentalSource = null;
+    
+    let currentFetchId = 0;
+
+    // Logic States
     let isPlaying = false;
     let isDraggingScrubber = false;
     let duration = 0;
+    
+    let offsetTime = 0;    // Tracks the play position across pauses
+    let startTime = 0;     // The context timeline absolute time when play started
+    let rafId = null;
 
     const formatTime = (seconds) => {
         if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
@@ -39,63 +57,96 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${min}:${sec.toString().padStart(2, '0')}`;
     };
 
-    const updateTimeDisplay = () => {
-        timeDisplay.textContent = `${formatTime(originalAudio.currentTime)} / ${formatTime(duration)}`;
+    const updateTimeDisplay = (currentTime) => {
+        timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
     };
 
-    const checkReadyState = () => {
-        if (originalLoaded && instrumentalLoaded) {
-            playPauseBtn.disabled = false;
-            timeScrubber.disabled = false;
-            duration = originalAudio.duration || 0;
-            timeScrubber.max = duration;
-            updateTimeDisplay();
+    const updateVolumes = () => {
+        const x = parseFloat(liplockFader.value);
+        originalGain.gain.value = Math.max(0, Math.min(1, 1.0 - x));
+        instrumentalGain.gain.value = Math.max(0, Math.min(1, x));
+    };
+
+    const stopPlayback = () => {
+        if (originalSource) {
+            try { originalSource.stop(); } catch(e){}
+            originalSource.disconnect();
+            originalSource = null;
+        }
+        if (instrumentalSource) {
+            try { instrumentalSource.stop(); } catch(e){}
+            instrumentalSource.disconnect();
+            instrumentalSource = null;
+        }
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
         }
     };
 
-    originalAudio.addEventListener('canplaythrough', () => {
-        originalLoaded = true;
-        checkReadyState();
-    });
+    const startPlayback = (timeOffset) => {
+        stopPlayback();
+        
+        if (!originalBuffer || !instrumentalBuffer) return;
+        
+        originalSource = audioCtx.createBufferSource();
+        originalSource.buffer = originalBuffer;
+        originalSource.connect(originalGain);
+        
+        instrumentalSource = audioCtx.createBufferSource();
+        instrumentalSource.buffer = instrumentalBuffer;
+        instrumentalSource.connect(instrumentalGain);
+        
+        originalSource.start(0, timeOffset);
+        instrumentalSource.start(0, timeOffset);
+        
+        startTime = audioCtx.currentTime;
+        offsetTime = timeOffset;
 
-    instrumentalAudio.addEventListener('canplaythrough', () => {
-        instrumentalLoaded = true;
-        checkReadyState();
-    });
-
-    originalAudio.addEventListener('loadedmetadata', () => {
-        duration = originalAudio.duration;
-        timeScrubber.max = duration;
-        updateTimeDisplay();
-    });
-
-    // Crossfade Logic implementation
-    const updateVolumes = () => {
-        const x = parseFloat(liplockFader.value);
-        originalAudio.volume = Math.max(0, Math.min(1, 1.0 - x));
-        instrumentalAudio.volume = Math.max(0, Math.min(1, x));
+        const updateTick = () => {
+            if (!isPlaying) return;
+            let currentPosition = offsetTime + (audioCtx.currentTime - startTime);
+            
+            if (currentPosition >= duration) {
+                // Audio natural end
+                isPlaying = false;
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+                offsetTime = 0;
+                timeScrubber.value = 0;
+                updateTimeDisplay(0);
+                stopPlayback();
+                return;
+            }
+            
+            if (!isDraggingScrubber) {
+                timeScrubber.value = currentPosition;
+                updateTimeDisplay(currentPosition);
+            }
+            rafId = requestAnimationFrame(updateTick);
+        };
+        rafId = requestAnimationFrame(updateTick);
     };
-
-    let originalObjectUrl = null;
-    let instrumentalObjectUrl = null;
-    let currentFetchId = 0;
 
     const loadTrack = async (index) => {
         const fetchId = ++currentFetchId;
         const track = TRACKS[index];
+        
         // Reset states
-        originalLoaded = false;
-        instrumentalLoaded = false;
+        if (isPlaying) {
+            stopPlayback();
+            isPlaying = false;
+        }
         playPauseBtn.disabled = true;
         timeScrubber.disabled = true;
-        isPlaying = false;
         isDraggingScrubber = false;
         duration = 0;
+        offsetTime = 0;
         
         playIcon.style.display = 'block';
         pauseIcon.style.display = 'none';
         timeScrubber.value = 0;
-        timeDisplay.textContent = "0:00 / 0:00";
+        updateTimeDisplay(0);
 
         try {
             const [origRes, instRes] = await Promise.all([
@@ -103,25 +154,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetch(track.instrumental)
             ]);
             
-            const origBlob = await origRes.blob();
-            const instBlob = await instRes.blob();
+            const origArrayBuffer = await origRes.arrayBuffer();
+            const instArrayBuffer = await instRes.arrayBuffer();
 
-            if (fetchId !== currentFetchId) return; // Ignore stale fetch
+            if (fetchId !== currentFetchId) return;
 
-            if (originalObjectUrl) URL.revokeObjectURL(originalObjectUrl);
-            if (instrumentalObjectUrl) URL.revokeObjectURL(instrumentalObjectUrl);
+            // AudioContext decodeAudioData gets Sample-Accurate representations 
+            originalBuffer = await audioCtx.decodeAudioData(origArrayBuffer);
+            instrumentalBuffer = await audioCtx.decodeAudioData(instArrayBuffer);
 
-            originalObjectUrl = URL.createObjectURL(origBlob);
-            instrumentalObjectUrl = URL.createObjectURL(instBlob);
+            if (fetchId !== currentFetchId) return;
 
-            originalAudio.src = originalObjectUrl;
-            instrumentalAudio.src = instrumentalObjectUrl;
+            duration = originalBuffer.duration;
+            timeScrubber.max = duration;
+            playPauseBtn.disabled = false;
+            timeScrubber.disabled = false;
             
-            originalAudio.load();
-            instrumentalAudio.load();
             updateVolumes();
+            updateTimeDisplay(0);
         } catch (err) {
-            console.error("Failed to fetch audio tracks", err);
+            console.error("Failed to decode audio tracks", err);
+            // Re-throw or ignore as necessary
         }
     };
 
@@ -134,61 +187,43 @@ document.addEventListener('DOMContentLoaded', () => {
         loadTrack(index);
     });
 
-    // Play / Pause Logic
+    // Play/Pause Action
     playPauseBtn.addEventListener('click', () => {
+        // Must resume AudioContext due to browser autoplay policies requiring User interaction
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
         if (isPlaying) {
-            originalAudio.pause();
-            instrumentalAudio.pause();
+            // Calculate how far we got before pausing, so we can resume from here later
+            offsetTime += (audioCtx.currentTime - startTime);
+            stopPlayback();
             playIcon.style.display = 'block';
             pauseIcon.style.display = 'none';
         } else {
-            const p1 = originalAudio.play();
-            const p2 = instrumentalAudio.play();
-            
-            if (p1 !== undefined) p1.catch(e => console.error("Original playback failed", e));
-            if (p2 !== undefined) p2.catch(e => console.error("Instrumental playback failed", e));
-
+            startPlayback(offsetTime);
             playIcon.style.display = 'none';
             pauseIcon.style.display = 'block';
         }
         isPlaying = !isPlaying;
     });
 
-    // When audio ends naturally
-    originalAudio.addEventListener('ended', () => {
-        isPlaying = false;
-        playIcon.style.display = 'block';
-        pauseIcon.style.display = 'none';
-        originalAudio.currentTime = 0;
-        instrumentalAudio.currentTime = 0;
-        timeScrubber.value = 0;
-        updateTimeDisplay();
-    });
-
+    // Timeline Scrub Logic
     timeScrubber.addEventListener('input', (e) => {
         isDraggingScrubber = true;
         const newTime = parseFloat(e.target.value);
-        timeDisplay.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+        updateTimeDisplay(newTime);
     });
 
     timeScrubber.addEventListener('change', (e) => {
         const newTime = parseFloat(e.target.value);
-        originalAudio.currentTime = newTime;
-        instrumentalAudio.currentTime = newTime;
+        offsetTime = newTime;
+        if (isPlaying) {
+            startPlayback(offsetTime);
+        }
         isDraggingScrubber = false;
     });
 
-    originalAudio.addEventListener('timeupdate', () => {
-        if (!isDraggingScrubber && duration > 0) {
-            timeScrubber.value = originalAudio.currentTime;
-            updateTimeDisplay();
-
-            const diff = Math.abs(originalAudio.currentTime - instrumentalAudio.currentTime);
-            if (diff > 0.1) {
-                instrumentalAudio.currentTime = originalAudio.currentTime;
-            }
-        }
-    });
-
+    // Crossfader target logic
     liplockFader.addEventListener('input', updateVolumes);
 });
