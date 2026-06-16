@@ -5,5 +5,8 @@ services:
     container_name: liplock-server
     build: .
     ports:
-      - "8080:8000"  # Map public Port 8080 to internal Python Port 8000
+      - "8080:8000"
+    volumes:
+      - "./Original Tracks:/app/Original Tracks"
+      - "./Instrumental Tracks:/app/Instrumental Tracks"
     restart: unless-stopped
