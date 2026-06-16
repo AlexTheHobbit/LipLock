@@ -4,7 +4,9 @@ import urllib.parse
 from mutagen.easyid3 import EasyID3
 
 def generate_tracks():
-    base_dir = r"s:\Files\Projects\Coding\LipLock"
+    # 🔥 Dynamically find the directory where this script actually lives
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
     originals_dir = os.path.join(base_dir, "Original Tracks")
     instrumentals_dir = os.path.join(base_dir, "Instrumental Tracks")
 

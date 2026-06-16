@@ -1,24 +1,22 @@
-# 1. Use an official lightweight Python image
 FROM python:3.11-slim
 
-# 2. Install Linux system dependencies (ffmpeg for audio, curl to download yt-dlp)
-RUN apt-get update && apt-get install -y \
+# 1. Install lightweight system audio dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install the Linux version of yt-dlp globally inside the container
+# 2. Install the Mutagen metadata tag reader required by your script
+RUN pip install --no-cache-dir mutagen
+
+# 3. Download Linux native yt-dlp binary
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# 4. Set the internal directory
 WORKDIR /app
 
-# 5. Copy all your project files (HTML, JS, CSS, Python scripts, Tracks) into the container
 COPY . .
 
-# 6. Your Python script is configured to use Port 8000
 EXPOSE 8000
 
-# 7. Start your custom Python server script
 CMD ["python", "server.py"]
