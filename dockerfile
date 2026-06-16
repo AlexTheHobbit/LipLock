@@ -1,22 +1,17 @@
+# 1. Use the absolute smallest official Python image (cuts size down drastically)
 FROM python:3.11-slim
 
-# 1. Install lightweight system audio dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Install the Mutagen metadata tag reader required by your script
-RUN pip install --no-cache-dir mutagen
-
-# 3. Download Linux native yt-dlp binary
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
-
+# 2. Set the working directory inside the container
 WORKDIR /app
 
+# 3. Install only the Mutagen library for real-time ID3 tag reading
+RUN pip install --no-cache-dir mutagen
+
+# 4. Copy your local code files into the sandbox
 COPY . .
 
+# 5. Expose the Python web server port
 EXPOSE 8000
 
+# 6. Boot the server
 CMD ["python", "server.py"]
