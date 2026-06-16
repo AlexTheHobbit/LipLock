@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  liplock-app:
+    container_name: liplock-server
+    build: .
+    ports:
+      - "8080:8000"  # Map public Port 8080 to internal Python Port 8000
+    restart: unless-stopped
