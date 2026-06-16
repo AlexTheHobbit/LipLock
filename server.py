@@ -30,7 +30,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             return []
 
         originals = [f for f in os.listdir(originals_dir) if f.endswith('.mp3')]
-        instrumentals = [f for f in os.listdir(instrumentals_dir) if f.endswith('_(Instrumental).wav')]
+        instrumentals = [f for f in os.listdir(instrumentals_dir) if f.endswith(('_(Instrumental).wav', '_(Instrumental).mp3'))]
 
         tracks_data = []
 
