@@ -66,7 +66,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                     "original": f"Original Tracks/{orig}",
                     "instrumental": f"Instrumental Tracks/{matched_inst}"
                 })
-                
+
+        tracks_data.sort(key=lambda t: t["artist"].lower())
         return tracks_data
 
     def handle_one_request(self):
